@@ -1,0 +1,320 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: "Template untuk membuat VPC, subnet, gateway, route table, dan security groups."
+
+Parameters:
+  VpcCIDR:
+    Type: String
+    Default: '192.168.10.0/24'
+    Description: CIDR block untuk VPC
+
+  PublicSubnetCIDR1:
+    Type: String
+    Default: '192.168.10.0/26'
+    Description: CIDR block untuk subnet publik pertama
+
+  PublicSubnetCIDR2:
+    Type: String
+    Default: '192.168.10.64/26'
+    Description: CIDR block untuk subnet publik kedua
+
+  PrivateSubnetCIDR1:
+    Type: String
+    Default: '192.168.10.128/26'
+    Description: CIDR block untuk subnet privat pertama
+
+  PrivateSubnetCIDR2:
+    Type: String
+    Default: '192.168.10.192/26'
+    Description: CIDR block untuk subnet privat kedua
+
+Resources:
+  # VPC
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCIDR
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: speaks-vpe
+
+  # Internet Gateway
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: speaks-igw
+
+  # Attach Internet Gateway
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  # NAT Gateway Elastic IP
+  ElasticIP:
+    Type: AWS::EC2::EIP
+
+  # NAT Gateway
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt ElasticIP.AllocationId
+      SubnetId: !Ref PublicSubnetA
+      Tags:
+        - Key: Name
+          Value: speaks-ngw
+
+  # Public Subnet A
+  PublicSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PublicSubnetCIDR1
+      AvailabilityZone: us-east-1a
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: speaks-pubsubnet-a
+
+  # Public Subnet B
+  PublicSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PublicSubnetCIDR2
+      AvailabilityZone: us-east-1b
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: speaks-pubsubnet-b
+
+  # Private Subnet A
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateSubnetCIDR1
+      AvailabilityZone: us-east-1a
+      Tags:
+        - Key: Name
+          Value: speaks-privsubnet-a
+
+  # Private Subnet B
+  PrivateSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateSubnetCIDR2
+      AvailabilityZone: us-east-1b
+      Tags:
+        - Key: Name
+          Value: speaks-privsubnet-b
+
+  # Public Route Table
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: speaks-rtpublic
+
+  # Route for Public Route Table
+  PublicRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  # Private Route Table
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: speaks-rtprivate
+
+  # Route for Private Route Table
+  PrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+
+  # Associate Public Route Table with Public Subnets
+  PublicSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetA
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetB
+      RouteTableId: !Ref PublicRouteTable
+
+  # Associate Private Route Table with Private Subnets
+  PrivateSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnetA
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnetB
+      RouteTableId: !Ref PrivateRouteTable
+
+  # Security Group for Load Balancer
+  IksLbSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Allow inbound traffic on ports 80 and 81 for load balancer"
+      VpcId: !Ref VPC
+      GroupName: Iks-lb-sg
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 81
+          ToPort: 81
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: Iks-lb-sg
+
+  # Security Group for Container
+  IksContainerSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Allow all TCP traffic from Iks-lb-sg"
+      VpcId: !Ref VPC
+      GroupName: lks-container-sg
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 0
+          ToPort: 65535
+          SourceSecurityGroupId: !Ref IksLbSg
+      Tags:
+        - Key: Name
+          Value: Iks-container-sg
+
+  # Security Group for Docker
+  IksDockerSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Allow inbound traffic on specified ports for Docker"
+      VpcId: !Ref VPC
+      GroupName: Iks-docker-sg
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 5000
+          ToPort: 5000
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 5001
+          ToPort: 5001
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 2376
+          ToPort: 2376
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 2377
+          ToPort: 2377
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 7946
+          ToPort: 7946
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 4789
+          ToPort: 4789
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: udp
+          FromPort: 7946
+          ToPort: 7946
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: Iks-docker-sg
+
+  # Security Group for DB
+  IksDbSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Allow inbound traffic for PostgreSQL and Redis from speaks-vpc"
+      VpcId: !Ref VPC
+      GroupName: Iks-db-sg
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432 
+          ToPort: 5432
+          CidrIp: !Sub '${VpcCIDR}'
+        - IpProtocol: tcp
+          FromPort: 6379 
+          ToPort: 6379
+          CidrIp: !Sub '${VpcCIDR}'
+      Tags:
+        - Key: Name
+          Value: Iks-db-sg
+
+Outputs:
+  VPCId:
+    Description: "The VPC ID"
+    Value: !Ref VPC
+
+  PublicSubnetAId:
+    Description: "The ID of the first public subnet"
+    Value: !Ref PublicSubnetA
+
+  PublicSubnetBId:
+    Description: "The ID of the second public subnet"
+    Value: !Ref PublicSubnetB
+
+  PrivateSubnetAId:
+    Description: "The ID of the first private subnet"
+    Value: !Ref PrivateSubnetA
+
+  PrivateSubnetBId:
+    Description: "The ID of the second private subnet"
+    Value: !Ref PrivateSubnetB
+
+  InternetGatewayId:
+    Description: "The ID of the Internet Gateway"
+    Value: !Ref InternetGateway
+
+  NatGatewayId:
+    Description: "The ID of the NAT Gateway"
+    Value: !Ref NatGateway
+
+  IksLbSgId:
+    Description: "The ID of the Load Balancer Security Group"
+    Value: !Ref IksLbSg
+
+  IksContainerSgId:
+    Description: "The ID of the Container Security Group"
+    Value: !Ref IksContainerSg
+
+  IksDockerSgId:
+    Description: "The ID of the Docker Security Group"
+    Value: !Ref IksDockerSg
+
+  IksDbSgId:
+    Description: "The ID of the DB Security Group"
+    Value: !Ref IksDbSg
