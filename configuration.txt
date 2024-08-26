@@ -1,0 +1,22 @@
+docker build -t 514386847458.dkr.ecr.us-east-1.amazonaws.com/voting-app:worker-dev-latest -f worker/Dockerfile ./worker
+docker build -t 514386847458.dkr.ecr.us-east-1.amazonaws.com/voting-app:result-dev-latest -f result/Dockerfile ./result
+docker build -t 514386847458.dkr.ecr.us-east-1.amazonaws.com/voting-app:vote-dev-latest -f vote/Dockerfile ./vote
+
+docker push 514386847458.dkr.ecr.us-east-1.amazonaws.com/voting-app:worker-dev-latest
+docker push 514386847458.dkr.ecr.us-east-1.amazonaws.com/voting-app:vote-dev-latest
+docker push 514386847458.dkr.ecr.us-east-1.amazonaws.com/voting-app:result-dev-latest
+
+docker build -t 514386847458.dkr.ecr.us-east-1.amazonaws.com/voting-app:worker-prod-latest -f worker/Dockerfile ./worker
+docker build -t 514386847458.dkr.ecr.us-east-1.amazonaws.com/voting-app:result-prod-latest -f result/Dockerfile ./result
+docker build -t 514386847458.dkr.ecr.us-east-1.amazonaws.com/voting-app:vote-prod-latest -f vote/Dockerfile ./vote
+
+docker push 514386847458.dkr.ecr.us-east-1.amazonaws.com/voting-app:worker-prod-latest
+docker push 514386847458.dkr.ecr.us-east-1.amazonaws.com/voting-app:vote-prod-latest
+docker push 514386847458.dkr.ecr.us-east-1.amazonaws.com/voting-app:result-prod-latest
+
+// User Data Auto on Docker swarm
+#!/bin/bash
+yum install docker dotnet-sdk-6.0 -y
+usermod -aG docker ec2-user
+systemctl start docker
+systemctl enable docker
