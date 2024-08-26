@@ -13,7 +13,7 @@ permissions:
 jobs:
   node1:
     name: Example Pull Image on node1
-    runs-on: node1
+    runs-on: node2
     steps:
       - name: Update runner's docker Version, as worker module requires it
         run: |
